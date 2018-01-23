@@ -10,22 +10,28 @@ from secrets import *
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+# create an OAuthHandler instance
+# Twitter requires all requests to use OAuth for authentication
 auth = tweepy.OAuthHandler(C_KEY, C_SECRET)
+
 auth.set_access_token(A_TOKEN, A_TOKEN_SECRET)
 
-api = tweepy.API(auth)
+# Construct the API instance
+api = tweepy.API(auth)  # create an API object
 
 
 def tweet_image(url, username, status_id):
-    # print(url)
-    filename = 'temp.jpg'
+    filename = 'temp.png'
+    # send a get request
     request = requests.get(url, stream=True)
     if request.status_code == 200:
+        # read data from downloaded bytes and returns a PIL.Image.Image object
         i = Image.open(BytesIO(request.content))
+        # Saves the image under the given filename
         i.save(filename)
-        i.show()
         scramble(filename)
-        api.update_with_media('scramble.jpg', status='@{0}'.format(username), in_reply_to_status_id=status_id)
+        # Update the authenticated user’s status
+        api.update_with_media('scramble.png', status='@{0}'.format(username), in_reply_to_status_id=status_id)
     else:
         print("unable to download image")
 
@@ -38,30 +44,39 @@ def scramble(filename):
 
     xblock = width // BLOCKLEN
     yblock = height // BLOCKLEN
+    # creates sequence of 4-tuples (box) defining the left, upper, right, and lower pixel coordinate
     blockmap = [(xb * BLOCKLEN, yb * BLOCKLEN, (xb + 1) * BLOCKLEN, (yb + 1) * BLOCKLEN)
                 for xb in range(xblock) for yb in range(yblock)]
 
     shuffle = list(blockmap)
+
+    # shuffle the sequence
     random.shuffle(shuffle)
 
+    # Creates a new image with the given mode and size.
     result = Image.new(img.mode, (width, height))
     for box, sbox in zip(blockmap, shuffle):
-        c = img.crop(sbox)
-        result.paste(c, box)
-    result.save('scramble.jpg')
-    result.show()
+        # Returns a rectangular region from this original image.
+        crop = img.crop(sbox)
+        # Pastes the cropped pixel into the new image Object
+        result.paste(crop, box)
+    result.save('scramble.png')
 
 
+# create a class inheriting from the tweepy  StreamListener
 class BotStreamer(tweepy.StreamListener):
+    # Called when a new status arrives which is passed down from the on_data method of the StreamListener
     def on_status(self, status):
         username = status.user.screen_name
         status_id = status.id
+
+        # entities provide structured data from Tweets including resolved URLs, media, hashtags and mentions without having to parse the text to extract that information
         if 'media' in status.entities:
             for image in status.entities['media']:
                 tweet_image(image['media_url'], username, status_id)
 
 
 myStreamListener = BotStreamer()
-# myStream = tweepy.Stream(auth = api.auth, listener=myStreamListener)
+# Construct the Stream instance
 stream = tweepy.Stream(auth, myStreamListener)
 stream.filter(track=['@picscrambler'])
